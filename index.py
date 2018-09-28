@@ -5,44 +5,25 @@ import time
 import math
 import os
 import sys
-from collections import Counter
 import copy
+import email.charset
+from encodings.aliases import aliases
+
+from collections import Counter, OrderedDict
 from functools import reduce
 from email import message_from_binary_file, policy
-import email.charset
 
+d = dict(aliases)
+email.charset.ALIASES.update(d)
 email.charset.ALIASES.update({
-    'iso-8859-8-i': 'iso-8859-8',
-    'x-mac-cyrillic': 'mac-cyrillic',
-    'macintosh': 'mac-roman',
-    'windows-874': 'cp874',
+    # 'iso-8859-8-i': 'iso-8859-8',
+    # 'x-mac-cyrillic': 'mac-cyrillic',
+    # 'macintosh': 'mac-roman',
+    # 'windows-874': 'cp874',
     'default': 'utf-8',
     'x-unknown': 'utf-8',
     '%charset': 'utf-8',
-    'latin_1': 'iso-8859-1',
-    'latin-1': 'iso-8859-1',
-    'latin_2': 'iso-8859-2',
-    'latin-2': 'iso-8859-2',
-    'latin_3': 'iso-8859-3',
-    'latin-3': 'iso-8859-3',
-    'latin_4': 'iso-8859-4',
-    'latin-4': 'iso-8859-4',
-    'latin_5': 'iso-8859-9',
-    'latin-5': 'iso-8859-9',
-    'latin_6': 'iso-8859-10',
-    'latin-6': 'iso-8859-10',
-    'latin_7': 'iso-8859-13',
-    'latin-7': 'iso-8859-13',
-    'latin_8': 'iso-8859-14',
-    'latin-8': 'iso-8859-14',
-    'latin_9': 'iso-8859-15',
-    'latin-9': 'iso-8859-15',
-    'latin_10':'iso-8859-16',
-    'latin-10':'iso-8859-16',
-    'cp949':   'ks_c_5601-1987',
-    'euc_jp':  'euc-jp',
-    'euc_kr':  'euc-kr',
-    'ascii':   'us-ascii',
+    '': 'utf-8'
 })
 
 email_labels = dict()
@@ -94,14 +75,14 @@ def removeStopWords(words):
 
 def read_files():
 	start_time = time.time()
-	dir = 'dataset-cut\data'
-	labelFile = 'dataset-cut\labels'	
+	dir = 'trec06p-cs280\data'
+	labelFile = 'trec06p-cs280\labels'	
 
 	with open(labelFile, 'r') as label_file:
 		for cnt, line in enumerate(label_file):
 			line = line.strip()
 			line = re.sub('[.]', '', line).split(" ")
-			email_labels["dataset-cut"+line[1]] = line[0]
+			email_labels["trec06p-cs280"+line[1]] = line[0]
 
 	all_words = []
 	for root, dirs, files in os.walk(dir):
@@ -109,6 +90,7 @@ def read_files():
 		for name in files:
 			path = os.path.join(root, name).replace("\\", r"/")
 			if os.path.isfile(path):
+				print("Reading "+path)
 				folder = root.split("\\")
 				classify = ""
 				if path in email_labels:
@@ -144,51 +126,9 @@ def read_files():
 				if(inTrainRange):
 					all_words += words
 
-				# with open(path, "rb") as text_file:
-				# 	words = []
-				# 	for line in text_file:
-				# 		word_regex = re.compile(b"[a-zA-Z]+")
-				# 		received_regex = re.compile(b"^Received:")
-				# 		from_regex = re.compile(b"^From:")
-				# 		to_regex = re.compile(b"^To:")
-				# 		sender_regex = re.compile(b"^Sender:")
-				# 		content_regex = re.compile(b"^Content-\S+")
-				# 		x_regex = re.compile(b"^X-\S+:")
-				# 		path_regex = re.compile(b"^Path")
-				# 		char_regex = re.compile(b"^<")
-
-				# 		line = line.rstrip()
-				# 		if re.search(received_regex, line) or re.search(from_regex, line) or re.search(to_regex, line) or re.search(content_regex, line) or re.search(x_regex, line) or re.search(path_regex, line) or re.search(sender_regex, line) or re.search(char_regex, line):
-				# 			continue
-
-				# 		words_per_file = re.findall(word_regex, line)
-				# 		words_per_file = [toString(word) for word in words_per_file]
-				# 		for k in range(len(words_per_file)):
-				# 			words_per_file[k] = words_per_file[k].lower()
-				# 			words_per_file[k] = words_per_file[k].replace("_", "")
-				# 			words_per_file[k] = re.sub("[0-9]+", "", words_per_file[k])
-				# 		words += [word for word in words_per_file if len(word) >= 4 and word.isalpha()]
-				#		words = removeStopWords(words)
-				# 	if(inTrainRange):
-				# 		if(classify == "spam"):
-				# 			train_spam.append(words)
-				# 		else:
-				# 			train_ham.append(words)
-				# 	else:
-				# 		if(classify == "spam"):
-				# 			test_spam.append(words)
-				# 		else:
-				# 			test_spam.append(words)
-
-
-				# 	if(inTrainRange):
-				# 		all_words += words
-
-						
-
 	
 	dictionary = Counter(all_words)
-	dictionary = {k:dictionary[k] for k in dictionary if dictionary[k] > 15}
+	dictionary = {k:dictionary[k] for k in dictionary if dictionary[k] > 2500}
 	return dictionary, train_spam, train_ham, test_spam, test_ham
 
 def merge_datasets():
@@ -207,25 +147,24 @@ def getFrequency():
 	spam_frequency = len(train_spam)
 	ham_frequency = len(train_ham)
 	
-	spam_probability = spam_frequency / (spam_frequency + ham_frequency)
-	ham_probability = ham_frequency / (spam_frequency + ham_frequency)
+	spam_prior_probability = spam_frequency / (spam_frequency + ham_frequency)
+	ham_prior_probability = ham_frequency / (spam_frequency + ham_frequency)
 
-	print("F(SPAM): " + str(spam_frequency))
-	print("F(HAM):" + str(ham_frequency))
-	print("P(SPAM):" + str(spam_probability))
-	print("P(HAM):" + str(ham_probability))
+	print("Number of SPAM Training Documents: " + str(spam_frequency))
+	print("Number of HAM Training Documents: " + str(ham_frequency))
+	print("SPAM Prior Probability: " + str(spam_prior_probability))
+	print("HAM Prior Probability:" + str(ham_prior_probability))
 
-	return spam_frequency, ham_frequency, spam_probability,ham_probability
+	return spam_frequency, ham_frequency, spam_prior_probability,ham_prior_probability
 
 def getFeatureMatrix(dataset, dictionary):
+	print("Creating feature matrix...")
+
 	feature_matrix = []
 	for each_file in dataset:
-		feature_vector = [0] * len(dictionary)
-		for each_word in each_file:
-			for d,dicword in enumerate(dictionary.keys()):
-				if each_word == dicword:
-					feature_vector[d] = 1
-		feature_matrix.append(feature_vector)
+		y = [1 if dicword in each_file else 0 for dicword in dictionary.keys()]
+		feature_matrix.append(y)
+
 	return feature_matrix
 
 
@@ -233,7 +172,7 @@ def main():
 	dictionary, train_spam, train_ham, test_spam, test_ham = read_files()
 	train_set, test_set, train_labels, test_labels = merge_datasets()
 
-	spam_frequency, ham_frequency, spam_probability,ham_probability = getFrequency()	
+	spam_frequency, ham_frequency, spam_prior_probability,ham_prior_probability = getFrequency()	
 	
 	#extract features
 	spam_feature_matrix = getFeatureMatrix(train_spam, dictionary)
@@ -247,13 +186,11 @@ def main():
 	spam_likelihood = [math.log10((sum(i)/spam_frequency)+1)  for i in zip(*spam_feature_matrix)]
 	ham_likelihood = [math.log10((sum(i)/ham_frequency)+1) for i in zip(*ham_feature_matrix)]
 
-	spam_count = 0
-	ham_count = 0
-	
+	#classify emails on the test set
 	test_results = []
 	for doc in testset_feature_matrix:
-		email_ham_prob = reduce(lambda x, y: x*y, [ham_likelihood[idx] if val==1 else 1-ham_likelihood[idx] for idx,val in enumerate(doc)])*ham_probability
-		email_spam_prob = reduce(lambda x, y: x*y, [spam_likelihood[idx] if val==1 else 1-spam_likelihood[idx] for idx,val in enumerate(doc)])*spam_probability
+		email_ham_prob = reduce(lambda x, y: x*y, [ham_likelihood[idx] if val==1 else 1-ham_likelihood[idx] for idx,val in enumerate(doc)])*ham_prior_probability
+		email_spam_prob = reduce(lambda x, y: x*y, [spam_likelihood[idx] if val==1 else 1-spam_likelihood[idx] for idx,val in enumerate(doc)])*spam_prior_probability
 		
 		email_ham = math.log10((email_ham_prob+1)/(email_ham_prob + email_spam_prob + len(dictionary)))
 		email_spam = math.log10((email_spam_prob+1)/(email_ham_prob + email_spam_prob + len(dictionary)))
@@ -263,19 +200,27 @@ def main():
 		else:
 			test_results.append(1)
 
-
+	#compare the test labels and test results
 	results = [''.join([str(i),str(j)]) for i, j in zip(test_labels, test_results)]
-
 	counts = Counter(results)
 	
 	accuracy = ((counts['11']+counts['00']) / sum(counts.values()))*100
 	recall = counts['11']/ (counts['11'] + counts['10'])*100
 	precision = counts['11'] / (counts['11'] + counts['01'])*100
 
+	print()
+	print("Correctly classified SPAM: " +str(counts['11']))
+	print("SPAM but classified as HAM: " +str(counts['10']))
+	print("HAM but classified as SPAM: " +str(counts['01']))
+	print("Correctly classified HAM: " +str(counts['00']))
+
+	print()
 	print("Accuracy: " + str(accuracy))
 	print("Recall: " + str(recall))
 	print("Precision: " + str(precision))
 
  
 if __name__ == '__main__':
+	start_time = time.time()		
 	main()
+	print("--- %s seconds ---" % (time.time() - start_time))
